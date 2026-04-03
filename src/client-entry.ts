@@ -113,20 +113,28 @@ function shouldMeasure(event: NavigateEvent): boolean {
 let navigationHandler: ((event: NavigateEvent) => void) | null = null;
 
 const activate = (): void => {
+  console.log('[page-load-timer] activate() called');
+  console.log('[page-load-timer] window.navigation:', typeof window.navigation);
   if (typeof window.navigation === 'undefined') return;
 
   // Render existing data on activate
   renderDisplay(loadEntries());
 
   navigationHandler = (event: NavigateEvent) => {
-    if (!shouldMeasure(event)) return;
+    console.log('[page-load-timer] navigate event:', event.navigationType, event.destination.url, 'canIntercept:', event.canIntercept);
+    if (!shouldMeasure(event)) {
+      console.log('[page-load-timer] skipped (shouldMeasure=false)');
+      return;
+    }
 
     const from = location.pathname;
     const start = performance.now();
+    console.log('[page-load-timer] intercepting navigation from', from);
 
     event.intercept({
       handler: async () => {
         const duration = performance.now() - start;
+        console.log('[page-load-timer] navigation completed:', duration.toFixed(0), 'ms');
         const entry: TimingEntry = {
           from,
           to: new URL(event.destination.url).pathname,
@@ -151,6 +159,7 @@ const deactivate = (): void => {
 };
 
 // Register plugin
+console.log('[page-load-timer] registering plugin');
 if (window.pluginActivators == null) {
   window.pluginActivators = {} as typeof window.pluginActivators;
 }
