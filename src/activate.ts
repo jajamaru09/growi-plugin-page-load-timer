@@ -90,35 +90,46 @@ function renderDisplay(entries: TimingEntry[]): void {
 const WIKI_SELECTOR = '.wiki';
 const DOM_TIMEOUT_MS = 10000;
 
-/**
- * Wait for .wiki content to change after navigation.
- * Captures a snapshot of .wiki innerHTML before navigation starts,
- * then watches for it to differ (= new page content rendered).
- */
-function waitForContentChange(previousContent: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    // Check if already changed
-    const wiki = document.querySelector(WIKI_SELECTOR);
-    if (wiki && wiki.innerHTML !== previousContent) {
-      resolve();
-      return;
+let pendingObserver: MutationObserver | null = null;
+let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+
+function cancelPendingWait(): void {
+  if (pendingObserver) {
+    pendingObserver.disconnect();
+    pendingObserver = null;
+  }
+  if (pendingTimer != null) {
+    clearTimeout(pendingTimer);
+    pendingTimer = null;
+  }
+}
+
+function waitForContentChange(
+  previousContent: string,
+  onDone: () => void,
+): void {
+  // Cancel any leftover observer from a previous navigation
+  cancelPendingWait();
+
+  // Check if already changed
+  const wiki = document.querySelector(WIKI_SELECTOR);
+  if (wiki && wiki.innerHTML !== previousContent) {
+    onDone();
+    return;
+  }
+
+  pendingTimer = setTimeout(() => {
+    cancelPendingWait();
+  }, DOM_TIMEOUT_MS);
+
+  pendingObserver = new MutationObserver(() => {
+    const el = document.querySelector(WIKI_SELECTOR);
+    if (el && el.innerHTML !== previousContent) {
+      cancelPendingWait();
+      onDone();
     }
-
-    const timer = setTimeout(() => {
-      observer.disconnect();
-      reject(new Error(`wiki content did not change within ${DOM_TIMEOUT_MS}ms`));
-    }, DOM_TIMEOUT_MS);
-
-    const observer = new MutationObserver(() => {
-      const el = document.querySelector(WIKI_SELECTOR);
-      if (el && el.innerHTML !== previousContent) {
-        clearTimeout(timer);
-        observer.disconnect();
-        resolve();
-      }
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
   });
+  pendingObserver.observe(document.body, { childList: true, subtree: true });
 }
 
 // --- Navigation Timing ---
@@ -136,9 +147,11 @@ function onNavigate(e: Event): void {
   if (isExcludedPath(dest.pathname)) return;
   if (dest.hash === '#edit') return;
 
+  // Cancel any pending wait from a previous navigation
+  cancelPendingWait();
+
   navigateFrom = location.pathname;
   navigateStart = performance.now();
-  // Snapshot current .wiki content so we can detect when it changes
   wikiSnapshot = document.querySelector(WIKI_SELECTOR)?.innerHTML ?? '';
 }
 
@@ -154,23 +167,19 @@ function onNavigateSuccess(): void {
   navigateFrom = null;
   wikiSnapshot = null;
 
-  waitForContentChange(contentSnapshot)
-    .then(() => {
-      const duration = performance.now() - startSnapshot;
-      const to = location.pathname;
+  waitForContentChange(contentSnapshot, () => {
+    const duration = performance.now() - startSnapshot;
+    const to = location.pathname;
 
-      const entry: TimingEntry = {
-        from: fromSnapshot,
-        to,
-        duration,
-        timestamp: Date.now(),
-      };
-      const entries = saveEntry(entry);
-      renderDisplay(entries);
-    })
-    .catch(() => {
-      // Timeout — page-meta did not appear; silently discard this measurement
-    });
+    const entry: TimingEntry = {
+      from: fromSnapshot,
+      to,
+      duration,
+      timestamp: Date.now(),
+    };
+    const entries = saveEntry(entry);
+    renderDisplay(entries);
+  });
 }
 
 // --- Plugin Lifecycle ---
@@ -189,6 +198,7 @@ export function activate(): void {
 }
 
 export function deactivate(): void {
+  cancelPendingWait();
   const n = nav();
   if (n) {
     n.removeEventListener('navigate', onNavigate);
