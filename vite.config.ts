@@ -5,7 +5,7 @@ export default defineConfig({
     outDir: 'dist',
     lib: {
       entry: 'src/client-entry.ts',
-      name: 'GrowrPluginPageLoadTimer',
+      name: 'GrowiPluginPageLoadTimer',
       fileName: 'client-entry',
       formats: ['iife'],
     },
