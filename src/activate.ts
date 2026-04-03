@@ -85,6 +85,34 @@ function renderDisplay(entries: TimingEntry[]): void {
   container.prepend(el);
 }
 
+// --- DOM Observation ---
+
+const PAGE_META_SELECTOR = '[class*="page-meta"]';
+const DOM_TIMEOUT_MS = 10000;
+
+function waitForPageMeta(): Promise<Element> {
+  return new Promise((resolve, reject) => {
+    // Already present — resolve immediately
+    const existing = document.querySelector(PAGE_META_SELECTOR);
+    if (existing) { resolve(existing); return; }
+
+    const timer = setTimeout(() => {
+      observer.disconnect();
+      reject(new Error(`page-meta not found within ${DOM_TIMEOUT_MS}ms`));
+    }, DOM_TIMEOUT_MS);
+
+    const observer = new MutationObserver(() => {
+      const el = document.querySelector(PAGE_META_SELECTOR);
+      if (el) {
+        clearTimeout(timer);
+        observer.disconnect();
+        resolve(el);
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+}
+
 // --- Navigation Timing ---
 
 let navigateStart: number | null = null;
@@ -108,22 +136,34 @@ function onNavigate(e: Event): void {
 function onNavigateSuccess(): void {
   if (navigateStart == null || navigateFrom == null) return;
 
-  const duration = performance.now() - navigateStart;
-  const to = location.pathname;
+  const startSnapshot = navigateStart;
+  const fromSnapshot = navigateFrom;
 
-  console.log('[page-load-timer] navigatesuccess:', duration.toFixed(0), 'ms', navigateFrom, '->', to);
-
-  const entry: TimingEntry = {
-    from: navigateFrom,
-    to,
-    duration,
-    timestamp: Date.now(),
-  };
-  const entries = saveEntry(entry);
-  renderDisplay(entries);
-
+  // Reset immediately so overlapping navigations don't double-fire
   navigateStart = null;
   navigateFrom = null;
+
+  console.log('[page-load-timer] navigatesuccess, waiting for page-meta DOM...');
+
+  waitForPageMeta()
+    .then(() => {
+      const duration = performance.now() - startSnapshot;
+      const to = location.pathname;
+
+      console.log('[page-load-timer] page-meta appeared:', duration.toFixed(0), 'ms', fromSnapshot, '->', to);
+
+      const entry: TimingEntry = {
+        from: fromSnapshot,
+        to,
+        duration,
+        timestamp: Date.now(),
+      };
+      const entries = saveEntry(entry);
+      renderDisplay(entries);
+    })
+    .catch((err) => {
+      console.error('[page-load-timer]', err);
+    });
 }
 
 // --- Plugin Lifecycle ---
