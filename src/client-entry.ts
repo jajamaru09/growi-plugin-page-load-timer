@@ -94,3 +94,67 @@ function renderDisplay(entries: TimingEntry[]): void {
 
   container.prepend(el);
 }
+
+function shouldMeasure(event: NavigateEvent): boolean {
+  if (event.navigationType !== 'push' && event.navigationType !== 'traverse') {
+    return false;
+  }
+  if (!event.canIntercept) return false;
+
+  const url = new URL(event.destination.url);
+  // Skip API calls
+  if (url.pathname.startsWith('/_api/')) return false;
+  // Skip edit mode
+  if (url.hash === '#edit') return false;
+
+  return true;
+}
+
+let navigationHandler: ((event: NavigateEvent) => void) | null = null;
+
+const activate = (): void => {
+  if (typeof window.navigation === 'undefined') return;
+
+  // Render existing data on activate
+  renderDisplay(loadEntries());
+
+  navigationHandler = (event: NavigateEvent) => {
+    if (!shouldMeasure(event)) return;
+
+    const from = location.pathname;
+    const start = performance.now();
+
+    event.intercept({
+      handler: async () => {
+        const duration = performance.now() - start;
+        const entry: TimingEntry = {
+          from,
+          to: new URL(event.destination.url).pathname,
+          duration,
+          timestamp: Date.now(),
+        };
+        const entries = saveEntry(entry);
+        renderDisplay(entries);
+      },
+    });
+  };
+
+  window.navigation.addEventListener('navigate', navigationHandler);
+};
+
+const deactivate = (): void => {
+  if (navigationHandler != null && typeof window.navigation !== 'undefined') {
+    window.navigation.removeEventListener('navigate', navigationHandler);
+    navigationHandler = null;
+  }
+  document.getElementById(ELEMENT_ID)?.remove();
+};
+
+// Register plugin
+if (window.pluginActivators == null) {
+  window.pluginActivators = {} as typeof window.pluginActivators;
+}
+window.pluginActivators['growi-plugin-page-load-timer'] = {
+  activate,
+  deactivate,
+};
