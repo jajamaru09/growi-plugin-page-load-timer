@@ -131,7 +131,6 @@ function onNavigate(e: Event): void {
   const event = e as NavigateEvent;
   const dest = new URL(event.destination.url);
 
-  console.log('[page-load-timer] navigate event:', event.navigationType, dest.pathname);
 
   if (event.navigationType !== 'push' && event.navigationType !== 'traverse') return;
   if (isExcludedPath(dest.pathname)) return;
@@ -141,7 +140,6 @@ function onNavigate(e: Event): void {
   navigateStart = performance.now();
   // Snapshot current .wiki content so we can detect when it changes
   wikiSnapshot = document.querySelector(WIKI_SELECTOR)?.innerHTML ?? '';
-  console.log('[page-load-timer] timing started from', navigateFrom);
 }
 
 function onNavigateSuccess(): void {
@@ -156,14 +154,10 @@ function onNavigateSuccess(): void {
   navigateFrom = null;
   wikiSnapshot = null;
 
-  console.log('[page-load-timer] navigatesuccess, waiting for .wiki content change...');
-
   waitForContentChange(contentSnapshot)
     .then(() => {
       const duration = performance.now() - startSnapshot;
       const to = location.pathname;
-
-      console.log('[page-load-timer] content rendered:', duration.toFixed(0), 'ms', fromSnapshot, '->', to);
 
       const entry: TimingEntry = {
         from: fromSnapshot,
@@ -174,8 +168,8 @@ function onNavigateSuccess(): void {
       const entries = saveEntry(entry);
       renderDisplay(entries);
     })
-    .catch((err) => {
-      console.error('[page-load-timer]', err);
+    .catch(() => {
+      // Timeout — page-meta did not appear; silently discard this measurement
     });
 }
 
@@ -184,19 +178,14 @@ function onNavigateSuccess(): void {
 const nav = (): EventTarget | undefined => (window as any).navigation;
 
 export function activate(): void {
-  console.log('[page-load-timer] activate() called');
   const n = nav();
-  if (!n) {
-    console.log('[page-load-timer] Navigation API not available');
-    return;
-  }
+  if (!n) return;
 
   // Render existing data on activate
   renderDisplay(loadEntries());
 
   n.addEventListener('navigate', onNavigate);
   n.addEventListener('navigatesuccess', onNavigateSuccess);
-  console.log('[page-load-timer] listeners registered');
 }
 
 export function deactivate(): void {
