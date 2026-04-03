@@ -2,7 +2,7 @@
   "name": "growi-plugin-page-load-timer",
   "version": "1.0.0",
   "description": "Measures and displays view-to-view page navigation time in Growi",
-  "main": "dist/client-entry.iife.js",
+  "main": "dist/client-entry.js",
   "scripts": {
     "build": "vite build",
     "dev": "vite build --watch"
