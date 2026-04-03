@@ -33,3 +33,26 @@ interface TimingEntry {
   duration: number;
   timestamp: number;
 }
+
+const STORAGE_KEY = 'growi-page-load-timer';
+const MAX_ENTRIES = 10;
+
+function loadEntries(): TimingEntry[] {
+  const raw = sessionStorage.getItem(STORAGE_KEY);
+  if (raw == null) return [];
+  try {
+    return JSON.parse(raw) as TimingEntry[];
+  } catch {
+    return [];
+  }
+}
+
+function saveEntry(entry: TimingEntry): TimingEntry[] {
+  const entries = loadEntries();
+  entries.push(entry);
+  if (entries.length > MAX_ENTRIES) {
+    entries.splice(0, entries.length - MAX_ENTRIES);
+  }
+  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+  return entries;
+}
