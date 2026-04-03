@@ -87,26 +87,34 @@ function renderDisplay(entries: TimingEntry[]): void {
 
 // --- DOM Observation ---
 
-const PAGE_META_SELECTOR = '[class*="page-meta"]';
+const WIKI_SELECTOR = '.wiki';
 const DOM_TIMEOUT_MS = 10000;
 
-function waitForPageMeta(): Promise<Element> {
+/**
+ * Wait for .wiki content to change after navigation.
+ * Captures a snapshot of .wiki innerHTML before navigation starts,
+ * then watches for it to differ (= new page content rendered).
+ */
+function waitForContentChange(previousContent: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    // Already present — resolve immediately
-    const existing = document.querySelector(PAGE_META_SELECTOR);
-    if (existing) { resolve(existing); return; }
+    // Check if already changed
+    const wiki = document.querySelector(WIKI_SELECTOR);
+    if (wiki && wiki.innerHTML !== previousContent) {
+      resolve();
+      return;
+    }
 
     const timer = setTimeout(() => {
       observer.disconnect();
-      reject(new Error(`page-meta not found within ${DOM_TIMEOUT_MS}ms`));
+      reject(new Error(`wiki content did not change within ${DOM_TIMEOUT_MS}ms`));
     }, DOM_TIMEOUT_MS);
 
     const observer = new MutationObserver(() => {
-      const el = document.querySelector(PAGE_META_SELECTOR);
-      if (el) {
+      const el = document.querySelector(WIKI_SELECTOR);
+      if (el && el.innerHTML !== previousContent) {
         clearTimeout(timer);
         observer.disconnect();
-        resolve(el);
+        resolve();
       }
     });
     observer.observe(document.body, { childList: true, subtree: true });
@@ -117,6 +125,7 @@ function waitForPageMeta(): Promise<Element> {
 
 let navigateStart: number | null = null;
 let navigateFrom: string | null = null;
+let wikiSnapshot: string | null = null;
 
 function onNavigate(e: Event): void {
   const event = e as NavigateEvent;
@@ -130,6 +139,8 @@ function onNavigate(e: Event): void {
 
   navigateFrom = location.pathname;
   navigateStart = performance.now();
+  // Snapshot current .wiki content so we can detect when it changes
+  wikiSnapshot = document.querySelector(WIKI_SELECTOR)?.innerHTML ?? '';
   console.log('[page-load-timer] timing started from', navigateFrom);
 }
 
@@ -138,19 +149,21 @@ function onNavigateSuccess(): void {
 
   const startSnapshot = navigateStart;
   const fromSnapshot = navigateFrom;
+  const contentSnapshot = wikiSnapshot ?? '';
 
   // Reset immediately so overlapping navigations don't double-fire
   navigateStart = null;
   navigateFrom = null;
+  wikiSnapshot = null;
 
-  console.log('[page-load-timer] navigatesuccess, waiting for page-meta DOM...');
+  console.log('[page-load-timer] navigatesuccess, waiting for .wiki content change...');
 
-  waitForPageMeta()
+  waitForContentChange(contentSnapshot)
     .then(() => {
       const duration = performance.now() - startSnapshot;
       const to = location.pathname;
 
-      console.log('[page-load-timer] page-meta appeared:', duration.toFixed(0), 'ms', fromSnapshot, '->', to);
+      console.log('[page-load-timer] content rendered:', duration.toFixed(0), 'ms', fromSnapshot, '->', to);
 
       const entry: TimingEntry = {
         from: fromSnapshot,
