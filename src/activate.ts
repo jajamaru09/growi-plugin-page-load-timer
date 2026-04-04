@@ -78,8 +78,8 @@ function renderDisplay(entries: TimingEntry[]): void {
   const avgColor = getColor(avgSec);
 
   el.innerHTML =
-    `⏱ 前回: <span style="color:${lastColor};font-weight:bold">${lastSec.toFixed(1)}s</span>` +
-    ` / 平均: <span style="color:${avgColor};font-weight:bold">${avgSec.toFixed(1)}s</span>` +
+    `⏱ 前回: <span style="color:${lastColor};">${lastSec.toFixed(1)}s</span>` +
+    ` / 平均: <span style="color:${avgColor};">${avgSec.toFixed(1)}s</span>` +
     ` (${entries.length})`;
 
   container.prepend(el);
